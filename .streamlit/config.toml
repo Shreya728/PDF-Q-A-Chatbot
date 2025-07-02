@@ -4,8 +4,9 @@ primaryColor="#4CAF50"
 font="sans serif"
 
 [server]
-port = 8501
+port = $PORT
 address = "0.0.0.0"
+enableCORS = false
 
 [runner]
 dockerImage = "shreya728/pdf-q-a-chatbot:latest"
