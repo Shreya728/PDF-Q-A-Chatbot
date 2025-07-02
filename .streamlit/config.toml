@@ -4,7 +4,6 @@ primaryColor="#4CAF50"
 font="sans serif"
 
 [server]
-port = $PORT
 address = "0.0.0.0"
 enableCORS = false
 
