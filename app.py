@@ -28,6 +28,9 @@ if not GROQ_API_KEY:
 USERS_DB_PATH = st.secrets.get("USERS_DB_PATH") or os.getenv("USERS_DB_PATH") or "users.db"
 CHATS_DB_PATH = st.secrets.get("CHATS_DB_PATH") or os.getenv("CHATS_DB_PATH") or "chats.db"
 
+# Load optional persist directory (ignored in in-memory mode)
+PERSIST_DIRECTORY = st.secrets.get("CHROMA_PERSIST_DIR") or os.getenv("CHROMA_PERSIST_DIR") or None
+
 # Initialize Groq client
 try:
     client = Groq(api_key=GROQ_API_KEY)
@@ -40,7 +43,7 @@ except Exception as e:
 # Initialize vector database
 if "vector_db" not in st.session_state:
     try:
-        st.session_state.vector_db = ChromaVectorDatabase()
+        st.session_state.vector_db = ChromaVectorDatabase(persist_directory=PERSIST_DIRECTORY)
         logger.info("Vector database initialized")
     except Exception as e:
         st.error(f"❌ Failed to initialize vector database: {str(e)}")
