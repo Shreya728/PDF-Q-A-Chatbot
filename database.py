@@ -21,11 +21,16 @@ class ChromaVectorDatabase:
             logger.error(f"Failed to load model {model_name}: {str(e)}")
             raise
 
-        # Use in-memory mode to avoid sqlite3 dependency
-        self.client = chromadb.Client(Settings(is_persistent=False))
-        self.collection = self.client.get_or_create_collection(name="document_embeddings")
+        # Attempt to initialize Chroma with in-memory mode
+        try:
+            self.client = chromadb.Client(Settings(is_persistent=False, allow_reset=True))
+            self.collection = self.client.get_or_create_collection(name="document_embeddings")
+            logger.info("ChromaVectorDatabase initialized successfully in in-memory mode!")
+        except Exception as e:
+            logger.error(f"Failed to initialize ChromaDB due to sqlite3 version issue: {str(e)}")
+            raise RuntimeError("ChromaDB initialization failed. Consider using a custom Docker image with sqlite3 >= 3.35.0.")
+
         self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200, length_function=len)
-        logger.info("ChromaVectorDatabase initialized successfully in in-memory mode!")
 
     def add_documents(self, documents: List[Document]):
         if not documents:
@@ -81,7 +86,7 @@ class ChromaVectorDatabase:
 
     def clear_database(self):
         try:
-            self.client.delete_collection(name="document_embeddings")
+            self.client.reset()
             self.collection = self.client.get_or_create_collection(name="document_embeddings")
             logger.info("Database cleared")
         except Exception as e:
