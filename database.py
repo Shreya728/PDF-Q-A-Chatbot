@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ChromaVectorDatabase:
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", persist_directory: str = "chroma_db"):
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2", persist_directory: str = None):
         logger.info("Initializing ChromaVectorDatabase...")
         try:
             self.model = SentenceTransformer(model_name)
@@ -20,8 +20,15 @@ class ChromaVectorDatabase:
         except Exception as e:
             logger.error(f"Failed to load model {model_name}: {str(e)}")
             raise
-        self.persist_directory = persist_directory
-        self.client = chromadb.Client(Settings(persist_directory=persist_directory))
+
+        # Use in-memory mode for cloud deployment if no persist_directory is set
+        if persist_directory is None or not os.path.exists(persist_directory):
+            logger.info("Using in-memory ChromaDB for cloud deployment")
+            self.client = chromadb.Client(Settings(is_persistent=False))
+        else:
+            self.client = chromadb.Client(Settings(persist_directory=persist_directory))
+            logger.info(f"Using persistent directory: {persist_directory}")
+
         self.collection = self.client.get_or_create_collection(name="document_embeddings")
         self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200, length_function=len)
         logger.info("ChromaVectorDatabase initialized successfully!")
@@ -90,10 +97,10 @@ class ChromaVectorDatabase:
         stats = {
             'total_documents': self.collection.count(),
             'has_embeddings': self.collection.count() > 0,
-            'database_path': self.persist_directory
+            'database_path': self.persist_directory if self.persist_directory else "in-memory"
         }
         try:
-            if os.path.exists(self.persist_directory):
+            if self.persist_directory and os.path.exists(self.persist_directory):
                 total_size = sum(os.path.getsize(os.path.join(self.persist_directory, f)) for f in os.listdir(self.persist_directory) if os.path.isfile(os.path.join(self.persist_directory, f)))
                 stats['database_size_mb'] = round(total_size / (1024 * 1024), 2)
             else:
