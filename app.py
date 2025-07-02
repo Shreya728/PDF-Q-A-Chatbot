@@ -1,6 +1,6 @@
+# app.py
 import streamlit as st
 import os
-import sqlite3
 import time
 from groq import Groq
 from database import ChromaVectorDatabase
@@ -8,6 +8,7 @@ from utils import process_attachment, login_user_base64 as login_user, register_
 from langchain.docstore.document import Document
 from dotenv import load_dotenv
 import logging
+import psycopg2  # Added to fix import error
 
 # Set up logging
 logging.basicConfig(
@@ -17,19 +18,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables and secrets
+# Load environment variables
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://username:password@localhost:5432/pdf_chatbot")
+logger.info(f"Loaded DATABASE_URL: {DATABASE_URL}")  # Debug print for URL
 if not GROQ_API_KEY:
-    st.error("🔑 GROQ_API_KEY not found in .env file or secrets")
+    st.error("🔑 GROQ_API_KEY not found in .env file")
     st.stop()
-
-# Load database paths from secrets or use defaults
-USERS_DB_PATH = st.secrets.get("USERS_DB_PATH") or os.getenv("USERS_DB_PATH") or "users.db"
-CHATS_DB_PATH = st.secrets.get("CHATS_DB_PATH") or os.getenv("CHATS_DB_PATH") or "chats.db"
-
-# Load optional persist directory (ignored in in-memory mode)
-PERSIST_DIRECTORY = st.secrets.get("CHROMA_PERSIST_DIR") or os.getenv("CHROMA_PERSIST_DIR") or None
 
 # Initialize Groq client
 try:
@@ -43,18 +39,32 @@ except Exception as e:
 # Initialize vector database
 if "vector_db" not in st.session_state:
     try:
-        st.session_state.vector_db = ChromaVectorDatabase(persist_directory=None)
+        st.session_state.vector_db = ChromaVectorDatabase(persist_directory="/data/chroma_db")  # Adjusted for Render's filesystem
         logger.info("Vector database initialized")
     except Exception as e:
-        st.error(f"❌ Failed to initialize vector database: {str(e)}. Please use a custom Docker image with sqlite3 >= 3.35.0.")
+        st.error(f"❌ Failed to initialize vector database: {str(e)}")
         logger.error(f"Vector database initialization error: {str(e)}")
         st.stop()
 
-# Initialize session state
-if "user" not in st.session_state:
-    st.session_state.user = None
+# Initialize database connection
+if "db_connection" not in st.session_state:
+    try:
+        st.session_state.db_connection = psycopg2.connect(DATABASE_URL)
+        logger.info("Database connection established and stored in session state")
+    except Exception as e:
+        st.error(f"❌ Failed to establish database connection: {str(e)}")
+        logger.error(f"Database connection error: {str(e)}")
+        st.stop()
+
+# Function to get database connection from session state
+def get_db_connection():
+    return st.session_state.db_connection
+
+# Initialize session state with default values
 if "page" not in st.session_state:
     st.session_state.page = "login"
+if "user" not in st.session_state:
+    st.session_state.user = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "chat_id" not in st.session_state:
@@ -64,8 +74,14 @@ if "current_files" not in st.session_state:
 if "current_files_id" not in st.session_state:
     st.session_state.current_files_id = None
 
-# Database setup with custom paths
-init_database(users_db_path=USERS_DB_PATH, chats_db_path=CHATS_DB_PATH)
+# Database setup with error handling
+try:
+    init_database()  # Uses the session connection
+    logger.info("Database initialized successfully")
+except Exception as e:
+    st.error(f"❌ Failed to initialize database: {str(e)}")
+    logger.error(f"Database initialization error: {str(e)}")
+    st.stop()
 
 # Custom CSS with white background and black font
 def load_css():
@@ -500,15 +516,15 @@ def display_chat_message(message: dict):
         """, unsafe_allow_html=True)
 
 def get_user_analytics(username: str) -> dict:
-    """Get user analytics."""
+    """Get user analytics using PostgreSQL."""
     try:
-        conn = sqlite3.connect(USERS_DB_PATH)
+        conn = get_db_connection()  # Use the session connection
         c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM user_activity WHERE username = ?", (username,))
+        c.execute("SELECT COUNT(*) FROM user_activity WHERE username = %s", (username,))
         total_activities = c.fetchone()[0]
-        c.execute("SELECT COUNT(DISTINCT chat_id) FROM chat_history WHERE username = ?", (username,))
+        c.execute("SELECT COUNT(DISTINCT chat_id) FROM chat_history WHERE username = %s", (username,))
         total_chats = c.fetchone()[0]
-        conn.close()
+        conn.commit()  # Ensure changes are committed if any
         return {"total_activities": total_activities, "total_chats": total_chats}
     except Exception as e:
         logger.error(f"Error getting analytics: {str(e)}")
@@ -556,7 +572,7 @@ def main_chat_page():
                     log_user_activity(st.session_state.user, "file_upload", f"files: {len(uploaded_files)}")
 
         st.markdown("### 💬 Chat Management")
-        chats = get_user_chats(st.session_state.user)
+        chats = get_user_chats(st.session_state.user) if st.session_state.user else []
         if chats:
             options = [f"Chat {chat_id}" for chat_id in chats[:10]]
             selected_chat = st.selectbox("Select Chat", options, index=None, key="chat_selector")
@@ -569,7 +585,7 @@ def main_chat_page():
         delete_chat()
 
         st.markdown("### 📊 Analytics")
-        analytics = get_user_analytics(st.session_state.user)
+        analytics = get_user_analytics(st.session_state.user) if st.session_state.user else {"total_activities": 0, "total_chats": 0}
         st.markdown(f'<div class="stats-card"><div class="stats-number">{analytics["total_chats"]}</div>Total Chats</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="stats-card"><div class="stats-number">{analytics["total_activities"]}</div>Total Activities</div>', unsafe_allow_html=True)
 
@@ -610,6 +626,8 @@ def login_page():
                 if login_user(username, password):
                     st.session_state.user = username
                     st.session_state.page = "main"
+                    st.session_state.messages = []  # Clear messages on login
+                    st.session_state.chat_id = 1  # Reset to default chat ID
                     log_user_activity(username, "login", "successful")
                     st.success("✅ Login successful!")
                     time.sleep(1)
@@ -660,5 +678,5 @@ elif st.session_state.page == "register":
 elif st.session_state.page == "main" and st.session_state.user:
     main_chat_page()
 else:
-    st.session_state.page = "login"
+    st.session_state.page = "login"  # Default to login page if not set
     st.rerun()
