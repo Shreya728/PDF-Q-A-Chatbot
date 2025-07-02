@@ -99,102 +99,108 @@ def process_attachment(uploaded_file):
         logger.warning(f"Unsupported file type: {file_type} ({filename})")
         return []
 
-def init_database():
+def init_database(users_db_path="users.db", chats_db_path="chats.db"):
     """Initialize the database with proper schema and handle migration."""
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
+    try:
+        # Initialize users database
+        conn_users = sqlite3.connect(users_db_path)
+        c_users = conn_users.cursor()
+        c_users.execute('''CREATE TABLE IF NOT EXISTS users 
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          username TEXT UNIQUE NOT NULL,
+                          password BLOB NOT NULL,
+                          display_name TEXT)''')
 
-    # Create or update users table
-    c.execute('''CREATE TABLE IF NOT EXISTS users 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  username TEXT UNIQUE NOT NULL,
-                  password BLOB NOT NULL,
-                  display_name TEXT)''')
+        # Check and migrate chat_history table
+        c_users.execute("PRAGMA table_info(chat_history)")
+        columns = [col[1] for col in c_users.fetchall()]
+        if "chat_history" in [table[0] for table in c_users.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]:
+            if "file_sources" not in columns:
+                c_users.execute("ALTER TABLE chat_history RENAME TO chat_history_old")
+                c_users.execute('''CREATE TABLE chat_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL,
+                    chat_id INTEGER NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    user_message TEXT NOT NULL,
+                    bot_response TEXT NOT NULL,
+                    file_sources TEXT)''')
+                c_users.execute("INSERT INTO chat_history (id, username, chat_id, timestamp, user_message, bot_response) SELECT id, username, chat_id, timestamp, user_message, bot_response FROM chat_history_old")
+                c_users.execute("DROP TABLE chat_history_old")
+                conn_users.commit()
+                logger.info("Migrated chat_history table to include file_sources column")
+        else:
+            c_users.execute('''CREATE TABLE IF NOT EXISTS chat_history 
+                             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                              username TEXT NOT NULL,
+                              chat_id INTEGER NOT NULL,
+                              timestamp TEXT NOT NULL,
+                              user_message TEXT NOT NULL,
+                              bot_response TEXT NOT NULL,
+                              file_sources TEXT)''')
 
-    # Check and migrate chat_history table
-    c.execute("PRAGMA table_info(chat_history)")
-    columns = [col[1] for col in c.fetchall()]
-    if "chat_history" in [table[0] for table in c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]:
-        if "file_sources" not in columns:
-            c.execute("ALTER TABLE chat_history RENAME TO chat_history_old")
-            c.execute('''CREATE TABLE chat_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                chat_id INTEGER NOT NULL,
-                timestamp TEXT NOT NULL,
-                user_message TEXT NOT NULL,
-                bot_response TEXT NOT NULL,
-                file_sources TEXT)''')
-            c.execute("INSERT INTO chat_history (id, username, chat_id, timestamp, user_message, bot_response) SELECT id, username, chat_id, timestamp, user_message, bot_response FROM chat_history_old")
-            c.execute("DROP TABLE chat_history_old")
-            conn.commit()
-            logger.info("Migrated chat_history table to include file_sources column")
-    else:
-        c.execute('''CREATE TABLE IF NOT EXISTS chat_history 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      username TEXT NOT NULL,
-                      chat_id INTEGER NOT NULL,
-                      timestamp TEXT NOT NULL,
-                      user_message TEXT NOT NULL,
-                      bot_response TEXT NOT NULL,
-                      file_sources TEXT)''')
+        # Check and migrate user_activity table
+        c_users.execute("PRAGMA table_info(user_activity)")
+        columns = [col[1] for col in c_users.fetchall()]
+        if "user_activity" in [table[0] for table in c_users.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]:
+            if "details" not in columns:
+                c_users.execute("ALTER TABLE user_activity RENAME TO user_activity_old")
+                c_users.execute('''CREATE TABLE user_activity (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL,
+                    activity_type TEXT NOT NULL,
+                    details TEXT,
+                    timestamp TEXT DEFAULT CURRENT_TIMESTAMP)''')
+                c_users.execute("INSERT INTO user_activity (id, username, activity_type, timestamp) SELECT id, username, activity_type, timestamp FROM user_activity_old")
+                c_users.execute("DROP TABLE user_activity_old")
+                conn_users.commit()
+                logger.info("Migrated user_activity table to include details column")
+        else:
+            c_users.execute('''CREATE TABLE IF NOT EXISTS user_activity 
+                             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                              username TEXT NOT NULL,
+                              activity_type TEXT NOT NULL,
+                              details TEXT,
+                              timestamp TEXT DEFAULT CURRENT_TIMESTAMP)''')
 
-    # Check and migrate user_activity table
-    c.execute("PRAGMA table_info(user_activity)")
-    columns = [col[1] for col in c.fetchall()]
-    if "user_activity" in [table[0] for table in c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]:
-        if "details" not in columns:
-            c.execute("ALTER TABLE user_activity RENAME TO user_activity_old")
-            c.execute('''CREATE TABLE user_activity (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                activity_type TEXT NOT NULL,
-                details TEXT,
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP)''')
-            c.execute("INSERT INTO user_activity (id, username, activity_type, timestamp) SELECT id, username, activity_type, timestamp FROM user_activity_old")
-            c.execute("DROP TABLE user_activity_old")
-            conn.commit()
-            logger.info("Migrated user_activity table to include details column")
-    else:
-        c.execute('''CREATE TABLE IF NOT EXISTS user_activity 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      username TEXT NOT NULL,
-                      activity_type TEXT NOT NULL,
-                      details TEXT,
-                      timestamp TEXT DEFAULT CURRENT_TIMESTAMP)''')
+        # Check and migrate file_processing table
+        c_users.execute("PRAGMA table_info(file_processing)")
+        columns = [col[1] for col in c_users.fetchall()]
+        if "file_processing" in [table[0] for table in c_users.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]:
+            if "size" not in columns:
+                c_users.execute("ALTER TABLE file_processing RENAME TO file_processing_old")
+                c_users.execute('''CREATE TABLE file_processing (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    size INTEGER,
+                    status TEXT,
+                    timestamp TEXT DEFAULT CURRENT_TIMESTAMP)''')
+                c_users.execute("INSERT INTO file_processing (id, username, filename, status, timestamp) SELECT id, username, filename, status, timestamp FROM file_processing_old")
+                c_users.execute("DROP TABLE file_processing_old")
+                conn_users.commit()
+                logger.info("Migrated file_processing table to include size column")
+        else:
+            c_users.execute('''CREATE TABLE IF NOT EXISTS file_processing 
+                             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                              username TEXT NOT NULL,
+                              filename TEXT NOT NULL,
+                              size INTEGER,
+                              status TEXT,
+                              timestamp TEXT DEFAULT CURRENT_TIMESTAMP)''')
 
-    # Check and migrate file_processing table
-    c.execute("PRAGMA table_info(file_processing)")
-    columns = [col[1] for col in c.fetchall()]
-    if "file_processing" in [table[0] for table in c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]:
-        if "size" not in columns:
-            c.execute("ALTER TABLE file_processing RENAME TO file_processing_old")
-            c.execute('''CREATE TABLE file_processing (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                filename TEXT NOT NULL,
-                size INTEGER,
-                status TEXT,
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP)''')
-            c.execute("INSERT INTO file_processing (id, username, filename, status, timestamp) SELECT id, username, filename, status, timestamp FROM file_processing_old")
-            c.execute("DROP TABLE file_processing_old")
-            conn.commit()
-            logger.info("Migrated file_processing table to include size column")
-    else:
-        c.execute('''CREATE TABLE IF NOT EXISTS file_processing 
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                      username TEXT NOT NULL,
-                      filename TEXT NOT NULL,
-                      size INTEGER,
-                      status TEXT,
-                      timestamp TEXT DEFAULT CURRENT_TIMESTAMP)''')
+        conn_users.commit()
+        conn_users.close()
 
-    conn.commit()
-    conn.close()
+        # Note: chat_history, user_activity, and file_processing are now in users.db as per your schema
+        # No separate chats.db is needed unless you split them later
+    except Exception as e:
+        logger.error(f"Error initializing databases: {e}")
+        raise
 
 def login_user_base64(username: str, password: str) -> bool:
     """Authenticate a user with base64-encoded hashed password."""
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect("users.db")  # Adjust if using users_db_path
     c = conn.cursor()
     c.execute("SELECT password FROM users WHERE username = ?", (username,))
     result = c.fetchone()
@@ -211,7 +217,7 @@ def login_user_base64(username: str, password: str) -> bool:
 
 def register_user_base64(username: str, password: str, display_name: str = None) -> bool:
     """Register a new user with base64-encoded hashed password and display name."""
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect("users.db")  # Adjust if using users_db_path
     c = conn.cursor()
     hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     hashed_b64 = base64.b64encode(hashed).decode('utf-8')
@@ -226,7 +232,7 @@ def register_user_base64(username: str, password: str, display_name: str = None)
 
 def save_chat_history(username: str, user_message: str, bot_response: str, chat_id: int = 1, file_sources: list = None):
     """Save chat history to the database with chat_id and file_sources."""
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect("users.db")  # Adjust if using users_db_path
     c = conn.cursor()
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT INTO chat_history (username, chat_id, timestamp, user_message, bot_response, file_sources) VALUES (?, ?, ?, ?, ?, ?)",
@@ -236,7 +242,7 @@ def save_chat_history(username: str, user_message: str, bot_response: str, chat_
 
 def get_chat_history(username: str, chat_id: int) -> List[dict]:
     """Retrieve chat history for a user and specific chat_id."""
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect("users.db")  # Adjust if using users_db_path
     c = conn.cursor()
     c.execute("SELECT user_message, bot_response, timestamp, file_sources FROM chat_history WHERE username = ? AND chat_id = ? ORDER BY timestamp",
               (username, chat_id))
@@ -246,7 +252,7 @@ def get_chat_history(username: str, chat_id: int) -> List[dict]:
 
 def get_user_chats(username: str) -> List[int]:
     """Retrieve distinct chat IDs for a user."""
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect("users.db")  # Adjust if using users_db_path
     c = conn.cursor()
     c.execute("SELECT DISTINCT chat_id FROM chat_history WHERE username = ? ORDER BY chat_id DESC", (username,))
     chat_ids = [row[0] for row in c.fetchall()]
@@ -255,7 +261,7 @@ def get_user_chats(username: str) -> List[int]:
 
 def delete_chat_history(username: str, chat_id: int):
     """Delete chat history for a specific chat_id."""
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect("users.db")  # Adjust if using users_db_path
     c = conn.cursor()
     c.execute("DELETE FROM chat_history WHERE username = ? AND chat_id = ?", (username, chat_id))
     conn.commit()
@@ -264,7 +270,7 @@ def delete_chat_history(username: str, chat_id: int):
 
 def log_user_activity(username: str, activity_type: str, details: str = None):
     """Log user activity."""
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect("users.db")  # Adjust if using users_db_path
     c = conn.cursor()
     c.execute("INSERT INTO user_activity (username, activity_type, details) VALUES (?, ?, ?)",
               (username, activity_type, details))
@@ -273,7 +279,7 @@ def log_user_activity(username: str, activity_type: str, details: str = None):
 
 def log_file_processing(username: str, filename: str, size: int, status: str):
     """Log file processing details."""
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect("users.db")  # Adjust if using users_db_path
     c = conn.cursor()
     c.execute("INSERT INTO file_processing (username, filename, size, status) VALUES (?, ?, ?, ?)",
               (username, filename, size, status))
