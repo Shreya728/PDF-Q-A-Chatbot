@@ -1,10 +1,14 @@
+import sys
+import logging
 import chromadb
 from chromadb.config import Settings
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
-import logging
 from typing import List, Dict, Any
+
+# Ensure SQLite compatibility using in-memory mode (no persistence)
+# Remove need to check or set SQLite version
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -14,7 +18,7 @@ class ChromaVectorDatabase:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2", persist_directory: str = None):
         logger.info("Initializing ChromaVectorDatabase...")
 
-        # Load the embedding model
+        # Load sentence transformer model
         try:
             self.model = SentenceTransformer(model_name)
             logger.info(f"Loaded model: {model_name}")
@@ -22,29 +26,14 @@ class ChromaVectorDatabase:
             logger.error(f"Failed to load model {model_name}: {str(e)}")
             raise
 
-        # Initialize ChromaDB with or without persistence
+        # Force in-memory ChromaDB (avoid sqlite3 errors)
         try:
-            if persist_directory:
-                logger.info(f"Using persistent directory: {persist_directory}")
-                self.client = chromadb.Client(Settings(
-                    is_persistent=True,
-                    persist_directory=persist_directory,
-                    allow_reset=True
-                ))
-            else:
-                logger.info("Using in-memory mode")
-                self.client = chromadb.Client(Settings(
-                    is_persistent=False,
-                    allow_reset=True
-                ))
-
+            self.client = chromadb.Client(Settings(is_persistent=False, allow_reset=True))
             self.collection = self.client.get_or_create_collection(name="document_embeddings")
-            logger.info("ChromaVectorDatabase initialized successfully")
+            logger.info("ChromaVectorDatabase initialized successfully (in-memory mode)")
         except Exception as e:
-            logger.error(f"Failed to initialize ChromaDB: {str(e)}")
-            raise RuntimeError(
-                "ChromaDB initialization failed. If deploying on Streamlit Cloud, make sure sqlite3 >= 3.35.0 or use in-memory mode."
-            )
+            logger.error(f"ChromaDB initialization failed: {str(e)}")
+            raise RuntimeError("ChromaDB failed to initialize. Use a custom Docker image if persistence is required.")
 
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
@@ -61,7 +50,6 @@ class ChromaVectorDatabase:
         try:
             chunks = self.text_splitter.split_documents(documents)
             logger.info(f"Split into {len(chunks)} chunks")
-
             if not chunks:
                 logger.warning("No chunks created")
                 return
@@ -100,7 +88,7 @@ class ChromaVectorDatabase:
             distances = results['distances'][0]
 
             docs = []
-            for i, (doc_content, meta, distance) in enumerate(zip(documents, metadatas, distances)):
+            for doc_content, meta, distance in zip(documents, metadatas, distances):
                 if distance < (1 - threshold):  # Convert similarity threshold to distance
                     meta_copy = meta.copy() if meta else {}
                     meta_copy["similarity_score"] = 1 - distance
@@ -109,7 +97,7 @@ class ChromaVectorDatabase:
             logger.info(f"Found {len(docs)} relevant documents")
             return docs
         except Exception as e:
-            logger.error(f"Failed to perform similarity search: {str(e)}")
+            logger.error(f"Similarity search failed: {str(e)}")
             return []
 
     def clear_database(self):
@@ -121,9 +109,8 @@ class ChromaVectorDatabase:
             logger.error(f"Failed to clear database: {str(e)}")
 
     def get_stats(self) -> Dict[str, Any]:
-        stats = {
+        return {
             'total_documents': self.collection.count(),
             'has_embeddings': self.collection.count() > 0,
-            'database_path': "in-memory or persistent"
+            'database_path': "in-memory"
         }
-        return stats
