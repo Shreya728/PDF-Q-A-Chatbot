@@ -43,7 +43,7 @@ except Exception as e:
 # Initialize vector database
 if "vector_db" not in st.session_state:
     try:
-        st.session_state.vector_db = ChromaVectorDatabase(persist_directory=PERSIST_DIRECTORY)
+        st.session_state.vector_db = ChromaVectorDatabase(persist_directory=None)
         logger.info("Vector database initialized")
     except Exception as e:
         st.error(f"❌ Failed to initialize vector database: {str(e)}. Please use a custom Docker image with sqlite3 >= 3.35.0.")
