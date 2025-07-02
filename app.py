@@ -1,9 +1,10 @@
 # app.py
-import streamlit as st
 import sys
+import streamlit as st
 import os
 import time
 from groq import Groq
+sys.path.append('/opt/render/project/src')
 from database import ChromaVectorDatabase
 from utils import process_attachment, login_user_base64 as login_user, register_user_base64 as register_user, save_chat_history, get_chat_history, get_user_chats, log_user_activity, log_file_processing, init_database, delete_chat_history
 from langchain.docstore.document import Document
