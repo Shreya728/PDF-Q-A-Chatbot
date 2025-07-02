@@ -1,0 +1,9 @@
+myenv/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pdf
+*.mp4
+*.mkv
+*.mov
