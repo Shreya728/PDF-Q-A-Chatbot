@@ -17,12 +17,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables
+# Load environment variables and secrets
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
 if not GROQ_API_KEY:
-    st.error("🔑 GROQ_API_KEY not found in .env file")
+    st.error("🔑 GROQ_API_KEY not found in .env file or secrets")
     st.stop()
+
+# Load database paths from secrets or use defaults
+USERS_DB_PATH = st.secrets.get("USERS_DB_PATH") or os.getenv("USERS_DB_PATH") or "users.db"
+CHATS_DB_PATH = st.secrets.get("CHATS_DB_PATH") or os.getenv("CHATS_DB_PATH") or "chats.db"
 
 # Initialize Groq client
 try:
@@ -57,8 +61,8 @@ if "current_files" not in st.session_state:
 if "current_files_id" not in st.session_state:
     st.session_state.current_files_id = None
 
-# Database setup
-init_database()
+# Database setup with custom paths
+init_database(users_db_path=USERS_DB_PATH, chats_db_path=CHATS_DB_PATH)
 
 # Custom CSS with white background and black font
 def load_css():
@@ -495,7 +499,7 @@ def display_chat_message(message: dict):
 def get_user_analytics(username: str) -> dict:
     """Get user analytics."""
     try:
-        conn = sqlite3.connect("users.db")
+        conn = sqlite3.connect(USERS_DB_PATH)
         c = conn.cursor()
         c.execute("SELECT COUNT(*) FROM user_activity WHERE username = ?", (username,))
         total_activities = c.fetchone()[0]
