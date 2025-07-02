@@ -46,7 +46,7 @@ if "vector_db" not in st.session_state:
         st.session_state.vector_db = ChromaVectorDatabase(persist_directory=PERSIST_DIRECTORY)
         logger.info("Vector database initialized")
     except Exception as e:
-        st.error(f"❌ Failed to initialize vector database: {str(e)}")
+        st.error(f"❌ Failed to initialize vector database: {str(e)}. Please use a custom Docker image with sqlite3 >= 3.35.0.")
         logger.error(f"Vector database initialization error: {str(e)}")
         st.stop()
 
