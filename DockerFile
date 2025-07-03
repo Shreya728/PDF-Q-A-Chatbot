@@ -1,23 +1,25 @@
-FROM python:3.10
+# Dockerfile
+FROM python:3.9-slim
 
 WORKDIR /app
 
-# Install system dependencies, including compilers
-# Add this before pip install
-RUN apt-get update && \
-    apt-get install -y wget build-essential libsqlite3-dev && \
-    wget https://www.sqlite.org/2023/sqlite-autoconf-3410200.tar.gz && \
-    tar xzf sqlite-autoconf-3410200.tar.gz && \
-    cd sqlite-autoconf-3410200 && \
-    ./configure && make && make install && \
-    ldconfig && \
-    cd .. && rm -rf sqlite-autoconf-3410200*
-
+# Install system dependencies for OCR, PDF processing, and PostgreSQL
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    poppler-utils \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Create persistent storage directory for ChromaDB
+RUN mkdir -p /data/chroma_db
+
+EXPOSE 8501
+
+HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
+
+ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
