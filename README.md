@@ -81,6 +81,38 @@ Conclusion
 The PDF Chatbot allows users to interact with PDFs using advanced AI models, providing a seamless and intuitive chat experience. Whether you're looking to summarize documents, ask questions, or search for information, this tool offers a user-friendly interface for effective communication.
 
 HERE ARE THE SCREENSHOTS ATTACHED FOR THE REFERENCE
-![image](https://github.com/user-attachments/assets/e72e68d8-eb1e-44bd-87ee-95c1d29ca15b)
+1 Account creation
+![image](https://github.com/user-attachments/assets/8a8772a0-eb34-46be-b02d-6c4b0a2801f7)
+2 Account login
+![image](https://github.com/user-attachments/assets/baadb4f1-edc6-4f17-b532-b8e95f6852cb)
+3 Web interface
+![image](https://github.com/user-attachments/assets/c2f402b2-345e-4966-bc7f-33ebd1aa2f92)
+4 Uploading of pdf and its processing
+![image](https://github.com/user-attachments/assets/dcd7948e-9d13-4de1-be85-7956a6b02c20)
+5 Question can be asked related to pdf once uploaded and Ai bot will give answers
+![image](https://github.com/user-attachments/assets/63fd6de4-362a-404b-a889-e01e1d19873b)
+6 In chat management you can select your previous chats and see the history
+![image](https://github.com/user-attachments/assets/aa0b3672-e244-4095-bce7-70a784a7c30c)
+7 You can delete the chat by first selecting chat ,loading chat and clicking on delete chat
+![image](https://github.com/user-attachments/assets/c4aef7ac-7bd8-4f9c-b0a3-31f732735368)
+8 You can click on export the chat by clicking on export chat button and the text file  will be downloaded
+![image](https://github.com/user-attachments/assets/a8635447-3131-4580-bf2f-e655734c88ba)
+9 By clicking on new chat ,new chat can be established
+![image](https://github.com/user-attachments/assets/4f916aad-554b-4458-845e-856a54df62db)
+10 click on logout to exit the web app
+![image](https://github.com/user-attachments/assets/a9c9c20a-29db-4213-8ce4-2cbbc7189c34)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
