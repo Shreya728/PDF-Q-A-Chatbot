@@ -80,5 +80,7 @@ User activity tracking
 Conclusion
 The PDF Chatbot allows users to interact with PDFs using advanced AI models, providing a seamless and intuitive chat experience. Whether you're looking to summarize documents, ask questions, or search for information, this tool offers a user-friendly interface for effective communication.
 
+HERE ARE THE SCREENSHOTS ATTACHED FOR THE REFERENCE
+![image](https://github.com/user-attachments/assets/e72e68d8-eb1e-44bd-87ee-95c1d29ca15b)
 
 
