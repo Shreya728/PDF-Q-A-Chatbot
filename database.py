@@ -12,24 +12,27 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ChromaVectorDatabase:
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", persist_directory: str = "chroma_db"):
+    def __init__(self, model_name: str = "paraphrase-MiniLM-L3-v2", persist_directory: str = "chroma_db"):
         logger.info("Initializing ChromaVectorDatabase...")
-        try:
-            self.model = SentenceTransformer(model_name)
-            logger.info(f"Loaded model: {model_name}")
-        except Exception as e:
-            logger.error(f"Failed to load model {model_name}: {str(e)}")
-            raise
+        self.model = None  # Lazy loading
+        self.model_name = model_name
         self.persist_directory = persist_directory
         self.client = chromadb.Client(Settings(persist_directory=persist_directory))
         self.collection = self.client.get_or_create_collection(name="document_embeddings")
-        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200, length_function=len)
+        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100, length_function=len)  # Reduced chunk size
+        self.clear_database()  # Clear any existing data
         logger.info("ChromaVectorDatabase initialized successfully!")
+
+    def _load_model(self):
+        if self.model is None:
+            self.model = SentenceTransformer(self.model_name)
+            logger.info(f"Loaded model: {self.model_name}")
 
     def add_documents(self, documents: List[Document]):
         if not documents:
             logger.warning("No documents to add")
             return
+        self._load_model()
         logger.info(f"Adding {len(documents)} documents...")
         try:
             chunks = self.text_splitter.split_documents(documents)
@@ -39,14 +42,9 @@ class ChromaVectorDatabase:
                 return
             texts = [chunk.page_content for chunk in chunks]
             metadata = [chunk.metadata for chunk in chunks]
-            embeddings = self.model.encode(texts, show_progress_bar=True, batch_size=32).tolist()
+            embeddings = self.model.encode(texts, show_progress_bar=False, batch_size=16).tolist()  # Smaller batch size
             ids = [f"doc_{i}" for i in range(len(chunks))]
-            self.collection.add(
-                embeddings=embeddings,
-                documents=texts,
-                metadatas=metadata,
-                ids=ids
-            )
+            self.collection.add(embeddings=embeddings, documents=texts, metadatas=metadata, ids=ids)
             logger.info(f"Added {len(chunks)} chunks to ChromaDB")
         except Exception as e:
             logger.error(f"Failed to add documents: {str(e)}")
@@ -56,13 +54,11 @@ class ChromaVectorDatabase:
         if not self.collection.count():
             logger.info("No documents in collection")
             return []
+        self._load_model()
         logger.info(f"Searching for query: '{query[:50]}...' (k={k})")
         try:
             query_embedding = self.model.encode([query]).tolist()
-            results = self.collection.query(
-                query_embeddings=query_embedding,
-                n_results=k
-            )
+            results = self.collection.query(query_embeddings=query_embedding, n_results=k)
             documents = results['documents'][0]
             metadatas = results['metadatas'][0]
             distances = results['distances'][0]
